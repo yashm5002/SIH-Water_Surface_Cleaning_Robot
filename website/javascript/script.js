@@ -1,77 +1,164 @@
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   const cameraFeed = document.getElementById("cameraFeed");
   const batteryLife = document.getElementById("batteryLife");
   const trashWeight = document.getElementById("trashWeight");
-  const waterCharacteristics = document.getElementById("waterCharacteristics");
   const currentLocation = document.getElementById("currentLocation");
+  const toggleVideoFeedButton = document.getElementById("toggleVideoFeed");
+  const popupAlert = document.getElementById("popupAlert");
+  const dismissPopup = document.getElementById("dismissPopup");
 
-  // Initialize the map with a default view
-  const map = L.map("map").setView([0, 0], 13);
+  let webcamStream = null;
+  let isVideoPlaying = true;
+  let isReturningToDock = false;
+
+  // Docking station coordinates (on nearby land)
+  const dockingStationCoords = [13.5014, 80.1236];
+
+  // Initialize the map with a default view (Pulicat Lake coordinates)
+  const map = L.map("map").setView([13.5211, 80.124], 13);
 
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     attribution: "© OpenStreetMap contributors",
   }).addTo(map);
 
-  const marker = L.marker([0, 0]).addTo(map);
+  const marker = L.marker([13.5211, 80.124]).addTo(map);
+
+  let battery = 100;
+  let weight = 0.0;
+
+  // Load the COCO-SSD model
+  const model = await cocoSsd.load();
 
   function fetchData() {
-    const cameraFeedUrl = "http://your-robot-ip/camera-feed";
-    const batteryLifeUrl = "http://your-robot-ip/battery-life";
-    const trashWeightUrl = "http://your-robot-ip/trash-weight";
-    const waterCharacteristicsUrl =
-      "http://your-robot-ip/water-characteristics";
-    const gpsUrl = "http://your-robot-ip/gps-location";
+    if (battery > 0) battery -= Math.random() * 2;
+    if (weight < 25) weight += Math.random() * 2.0;
 
-    cameraFeed.src = cameraFeedUrl;
+    batteryLife.textContent = `${battery.toFixed(2)}%`;
+    trashWeight.textContent = `${weight.toFixed(2)} kg`;
 
-    fetch(batteryLifeUrl)
-      .then((response) => response.json())
-      .then((data) => {
-        batteryLife.textContent = `${data.battery}%`;
-
-        if (data.battery < 20) {
-          alert(
-            "Battery is below 20%. The robot is returning to the starting point."
-          );
-        }
-      })
-      .catch((error) => console.error("Error fetching battery life:", error));
-
-    fetch(trashWeightUrl)
-      .then((response) => response.json())
-      .then((data) => {
-        trashWeight.textContent = `${data.weight} kg`;
-
-        if (data.weight >= 23) {
-          alert(
-            "Trash weight has reached 23 kg. The robot is returning to the starting point."
-          );
-        }
-      })
-      .catch((error) => console.error("Error fetching trash weight:", error));
-
-    fetch(waterCharacteristicsUrl)
-      .then((response) => response.json())
-      .then((data) => {
-        waterCharacteristics.textContent = `pH: ${data.ph}, Turbidity: ${data.turbidity}`;
-      })
-      .catch((error) =>
-        console.error("Error fetching water characteristics:", error)
-      );
-
-    fetch(gpsUrl)
-      .then((response) => response.json())
-      .then((data) => {
-        const lat = data.latitude;
-        const lon = data.longitude;
-
-        currentLocation.textContent = `Latitude: ${lat}, Longitude: ${lon}`;
-
-        marker.setLatLng([lat, lon]);
-        map.setView([lat, lon], 13);
-      })
-      .catch((error) => console.error("Error fetching GPS location:", error));
+    if (battery <= 30 || weight >= 23.5) {
+      isReturningToDock = true;
+      showPopupAlert();
+      clearInterval(fetchInterval);
+      moveToDockingStation(); // Move the robot to docking station
+    }
   }
 
-  setInterval(fetchData, 5000);
+  function fetchGPS() {
+    if (!isReturningToDock) {
+      const lat = 13.5211 + Math.random() * 0.005;
+      const lon = 80.124 + Math.random() * 0.005;
+
+      currentLocation.textContent = `Latitude: ${lat.toFixed(
+        5
+      )}, Longitude: ${lon.toFixed(5)}`;
+
+      marker.setLatLng([lat, lon]);
+      map.setView([lat, lon], 13);
+    }
+  }
+
+  function startWebcam() {
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      navigator.mediaDevices
+        .getUserMedia({ video: true })
+        .then((stream) => {
+          webcamStream = stream;
+          cameraFeed.srcObject = stream;
+          cameraFeed.play();
+          setupDetection();
+        })
+        .catch((error) => {
+          console.error("Error accessing webcam:", error);
+        });
+    } else {
+      alert("Webcam is not supported in this browser.");
+    }
+  }
+
+  function stopWebcam() {
+    if (webcamStream) {
+      webcamStream.getTracks().forEach((track) => track.stop());
+      cameraFeed.srcObject = null;
+    }
+  }
+
+  function showPopupAlert() {
+    popupAlert.style.display = "flex";
+  }
+
+  function hidePopupAlert() {
+    popupAlert.style.display = "none";
+  }
+
+  // Move the robot to the docking station (on land)
+  function moveToDockingStation() {
+    marker.setLatLng(dockingStationCoords);
+    map.setView(dockingStationCoords, 15);
+    currentLocation.textContent = `Docking at Latitude: ${dockingStationCoords[0].toFixed(
+      5
+    )}, Longitude: ${dockingStationCoords[1].toFixed(5)}`;
+  }
+
+  function setupDetection() {
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+    canvas.width = cameraFeed.videoWidth;
+    canvas.height = cameraFeed.videoHeight;
+    document.body.appendChild(canvas);
+
+    async function detectTrash() {
+      const predictions = await model.detect(cameraFeed);
+
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(cameraFeed, 0, 0, canvas.width, canvas.height);
+
+      predictions.forEach((prediction) => {
+        if (
+          ["plastic", "paper", "cardboard", "glass", "metal"].includes(
+            prediction.class
+          )
+        ) {
+          const [x, y, width, height] = prediction.bbox;
+          context.beginPath();
+          context.rect(x, y, width, height);
+          context.lineWidth = 2;
+          context.strokeStyle = "red";
+          context.fillStyle = "red";
+          context.stroke();
+          context.fillText(
+            `${prediction.class} (${Math.round(prediction.score * 100)}%)`,
+            x,
+            y > 10 ? y - 10 : 10
+          );
+        }
+      });
+
+      requestAnimationFrame(detectTrash);
+    }
+
+    detectTrash();
+  }
+
+  toggleVideoFeedButton.addEventListener("click", () => {
+    if (isVideoPlaying) {
+      stopWebcam();
+      toggleVideoFeedButton.textContent = "Resume Video Feed";
+    } else {
+      startWebcam();
+      toggleVideoFeedButton.textContent = "Pause Video Feed";
+    }
+    isVideoPlaying = !isVideoPlaying;
+  });
+
+  dismissPopup.addEventListener("click", () => {
+    hidePopupAlert();
+  });
+
+  startWebcam();
+
+  const fetchInterval = setInterval(() => {
+    fetchData();
+    fetchGPS();
+  }, 1000);
 });
