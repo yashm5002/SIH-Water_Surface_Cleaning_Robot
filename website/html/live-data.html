@@ -6,6 +6,72 @@
     <title>Live Data</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <style>
+        /* General Styling */
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #ffffff, #cce7ff);
+            margin: 0;
+            padding: 0;
+            color: #333;
+            text-align: center;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Popup Alert */
+        .popup-alert {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .popup-alert-content {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .popup-alert-content h2 {
+            color: #e74c3c;
+            margin-bottom: 20px;
+        }
+
+        .popup-alert-content button {
+            background-color: #2a7ba3;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        /* Map Styling */
+        #map {
+            height: 400px; /* Adjust height as needed */
+            width: 100%; /* Full width */
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+
+        /* Footer */
+        footer {
+            background-color: #2a7ba3;
+            color: #fff;
+            padding: 20px 0;
+            font-size: 1em;
+            margin-top: auto;
+        }
+    </style>
 </head>
 <body>
     <header class="hero">
@@ -16,7 +82,8 @@
     <div class="container">
         <div class="video-feed">
             <h2>Live Camera Feed</h2>
-            <video id="cameraFeed" controls autoplay></video>
+            <video id="cameraFeed" autoplay></video>
+            <button id="toggleVideoFeed">Pause Video Feed</button>
         </div>
 
         <div class="stats">
@@ -27,9 +94,6 @@
             <div class="stat">
                 <p>Weight of Trash Collected: <span id="trashWeight">Loading...</span></p>
             </div>
-            <div class="stat">
-                <p>Water Characteristics: <span id="waterCharacteristics">Loading...</span></p>
-            </div>
         </div>
     </div>
 
@@ -37,6 +101,15 @@
         <h2>Robot Location Tracker</h2>
         <div id="map"></div>
         <p>Current Location: <span id="currentLocation">Loading...</span></p>
+    </div>
+
+    <!-- Popup Alert -->
+    <div class="popup-alert" id="popupAlert">
+        <div class="popup-alert-content">
+            <h2>Alert: Robot Returning to Dock</h2>
+            <p>The robot is heading back to the docking station due to low battery or full trash bin.</p>
+            <button id="dismissPopup">Dismiss</button>
+        </div>
     </div>
 
     <footer>
@@ -51,6 +124,143 @@
     </footer>
 
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
-    <script src="script.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            const cameraFeed = document.getElementById("cameraFeed");
+            const batteryLife = document.getElementById("batteryLife");
+            const trashWeight = document.getElementById("trashWeight");
+            const currentLocation = document.getElementById("currentLocation");
+            const toggleVideoFeedButton = document.getElementById("toggleVideoFeed");
+            const popupAlert = document.getElementById("popupAlert");
+            const dismissPopup = document.getElementById("dismissPopup");
+
+            let webcamStream = null;
+            let isVideoPlaying = true;
+            let isReturningToDock = false;
+
+            // Docking station coordinates (on nearby land)
+            const dockingStationCoords = [13.4960, 80.1206];
+            let currentCoords = [13.5211, 80.1240]; // Start at Pulicat Lake
+
+            // Initialize the map with a default view (Pulicat Lake coordinates)
+            const map = L.map("map").setView(currentCoords, 13); 
+
+            L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+                attribution: "© OpenStreetMap contributors",
+            }).addTo(map);
+
+            const marker = L.marker(currentCoords).addTo(map);
+
+            let battery = 100; 
+            let weight = 0.0;
+            const movementInterval = 1000; // Time interval for movement updates (in ms)
+
+            function fetchData() {
+                if (battery > 0) battery -= Math.random() * 2;
+                if (weight < 25) weight += Math.random() * 2.0;
+
+                batteryLife.textContent = `${battery.toFixed(2)}%`;
+                trashWeight.textContent = `${weight.toFixed(2)} kg`;
+
+                if (battery <= 30 || weight >= 23.5) {
+                    isReturningToDock = true;
+                    showPopupAlert();
+                    clearInterval(fetchInterval);
+                    moveToDockingStation();  // Begin moving the robot to docking station
+                }
+            }
+
+            function fetchGPS() {
+                if (!isReturningToDock) {
+                    const lat = 13.5211 + Math.random() * 0.005;
+                    const lon = 80.1240 + Math.random() * 0.005;
+
+                    currentCoords = [lat, lon];
+                    currentLocation.textContent = `Latitude: ${lat.toFixed(5)}, Longitude: ${lon.toFixed(5)}`;
+
+                    marker.setLatLng([lat, lon]);
+                    map.setView([lat, lon], 13);
+                }
+            }
+
+            function startWebcam() {
+                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                    navigator.mediaDevices
+                        .getUserMedia({ video: true })
+                        .then((stream) => {
+                            webcamStream = stream;
+                            cameraFeed.srcObject = stream;
+                        })
+                        .catch((error) => {
+                            console.error("Error accessing webcam:", error);
+                        });
+                } else {
+                    alert("Webcam is not supported in this browser.");
+                }
+            }
+
+            function stopWebcam() {
+                if (webcamStream) {
+                    webcamStream.getTracks().forEach((track) => track.stop());
+                    cameraFeed.srcObject = null;
+                }
+            }
+
+            function showPopupAlert() {
+                popupAlert.style.display = "flex";
+            }
+
+            function hidePopupAlert() {
+                popupAlert.style.display = "none";
+            }
+
+            // Move the robot to the docking station (on land) gradually
+            function moveToDockingStation() {
+                const movementStep = 0.01; // Step size for gradual movement
+
+                const interval = setInterval(() => {
+                    const latDifference = dockingStationCoords[0] - currentCoords[0];
+                    const lonDifference = dockingStationCoords[1] - currentCoords[1];
+
+                    // Check if the robot has reached or is very close to the docking station
+                    if (Math.abs(latDifference) < movementStep && Math.abs(lonDifference) < movementStep) {
+                        currentCoords = dockingStationCoords;
+                        clearInterval(interval);
+                        currentLocation.textContent = `Docking at Latitude: ${dockingStationCoords[0].toFixed(5)}, Longitude: ${dockingStationCoords[1].toFixed(5)}`;
+                    } else {
+                        // Move a step closer to the docking station
+                        currentCoords[0] += latDifference * 0.1; // Move 1% closer on latitude
+                        currentCoords[1] += lonDifference * 0.1; // Move 1% closer on longitude
+
+                        marker.setLatLng(currentCoords);
+                        map.setView(currentCoords, 15);
+                        currentLocation.textContent = `Latitude: ${currentCoords[0].toFixed(5)}, Longitude: ${currentCoords[1].toFixed(5)}`;
+                    }
+                }, movementInterval); // Update every second
+            }
+
+            toggleVideoFeedButton.addEventListener("click", () => {
+                if (isVideoPlaying) {
+                    stopWebcam();
+                    toggleVideoFeedButton.textContent = "Resume Video Feed";
+                } else {
+                    startWebcam();
+                    toggleVideoFeedButton.textContent = "Pause Video Feed";
+                }
+                isVideoPlaying = !isVideoPlaying;
+            });
+
+            dismissPopup.addEventListener("click", () => {
+                hidePopupAlert();
+            });
+
+            startWebcam();
+
+            const fetchInterval = setInterval(() => {
+                fetchData();
+                fetchGPS();
+            }, 1000); 
+        });
+    </script>
 </body>
 </html>
