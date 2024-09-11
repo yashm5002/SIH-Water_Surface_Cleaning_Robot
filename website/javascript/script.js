@@ -11,22 +11,20 @@ document.addEventListener("DOMContentLoaded", async () => {
   let isVideoPlaying = true;
   let isReturningToDock = false;
 
-  // Docking station coordinates (on nearby land)
+
   const dockingStationCoords = [13.5014, 80.1236];
 
-  // Initialize the map with a default view (Pulicat Lake coordinates)
+  
   const map = L.map("map").setView([13.5211, 80.124], 13);
 
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution: "© OpenStreetMap contributors",
-  }).addTo(map);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {attribution: "© OpenStreetMap contributors",}).addTo(map);
 
   const marker = L.marker([13.5211, 80.124]).addTo(map);
 
   let battery = 100;
   let weight = 0.0;
 
-  // Load the COCO-SSD model
+ 
   const model = await cocoSsd.load();
 
   function fetchData() {
@@ -40,7 +38,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       isReturningToDock = true;
       showPopupAlert();
       clearInterval(fetchInterval);
-      moveToDockingStation(); // Move the robot to docking station
+      moveToDockingStation();
     }
   }
 
@@ -49,9 +47,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       const lat = 13.5211 + Math.random() * 0.005;
       const lon = 80.124 + Math.random() * 0.005;
 
-      currentLocation.textContent = `Latitude: ${lat.toFixed(
-        5
-      )}, Longitude: ${lon.toFixed(5)}`;
+      currentLocation.textContent = `Latitude: ${lat.toFixed(5)}, Longitude: ${lon.toFixed(5)}`;
 
       marker.setLatLng([lat, lon]);
       map.setView([lat, lon], 13);
@@ -91,7 +87,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     popupAlert.style.display = "none";
   }
 
-  // Move the robot to the docking station (on land)
+  
   function moveToDockingStation() {
     marker.setLatLng(dockingStationCoords);
     map.setView(dockingStationCoords, 15);
