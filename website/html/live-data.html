@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <style>
-        /* General Styling */
+        
         body {
             font-family: 'Poppins', sans-serif;
             background: linear-gradient(135deg, #ffffff, #cce7ff);
@@ -20,7 +20,7 @@
             flex-direction: column;
         }
 
-        /* Popup Alert */
+    
         .popup-alert {
             display: none;
             position: fixed;
@@ -55,7 +55,7 @@
             cursor: pointer;
         }
 
-        /* Map Styling */
+    
         #map {
             height: 400px;
             width: 100%;
@@ -63,7 +63,7 @@
             margin-top: 20px;
         }
 
-        /* Footer */
+       
         footer {
             background-color: #2a7ba3;
             color: #fff;
@@ -71,8 +71,6 @@
             font-size: 1em;
             margin-top: auto;
         }
-
-        /* Button Styling */
         #manualOverrideButton {
             background-color: #e74c3c;
             color: white;
@@ -115,11 +113,11 @@
         <h2>Robot Location Tracker</h2>
         <div id="map"></div>
         <p>Current Location: <span id="currentLocation">Loading...</span></p>
-        <!-- Manual Override Button -->
+    
         <button id="manualOverrideButton">Manual Override: Return to Dock</button>
     </div>
 
-    <!-- Popup Alert -->
+   
     <div class="popup-alert" id="popupAlert">
         <div class="popup-alert-content">
             <h2>Alert: Robot Returning to Dock</h2>
@@ -128,7 +126,7 @@
         </div>
     </div>
 
-    <!-- Popup for charging and unloading -->
+   
     <div class="popup-alert" id="chargingPopup">
         <div class="popup-alert-content">
             <h2>Charging and Unloading</h2>
@@ -136,8 +134,6 @@
             <button id="dismissChargingPopup">Dismiss</button>
         </div>
     </div>
-
-    <!-- Popup for fully charged and reset -->
     <div class="popup-alert" id="fullyChargedPopup">
         <div class="popup-alert-content">
             <h2>Fully Charged and Reset</h2>
@@ -192,15 +188,15 @@
 
             let battery = 100;
             let weight = 0.0;
-            let waterQualityValue = 250; // Initial value for water quality
+            let waterQualityValue = 250;
             const movementInterval = 1000;
-            let fetchInterval; // Declare fetchInterval globally for clearing it
+            let fetchInterval;
 
             function fetchData() {
                 if (battery > 0) battery -= Math.random() * 2;
                 if (weight < 25) weight += Math.random() * 2.0;
 
-                // Update water quality value between 200 to 300 ppm
+               
                 waterQualityValue = 200 + Math.random() * 100;
 
                 if (battery < 0) battery = 0;
@@ -208,7 +204,7 @@
 
                 batteryLife.textContent = `${battery.toFixed(2)}%`;
                 trashWeight.textContent = `${weight.toFixed(2)} kg`;
-                waterQuality.textContent = `${waterQualityValue.toFixed(2)} `; // Update water quality display
+                waterQuality.textContent = `${waterQualityValue.toFixed(2)} `;
 
                 if (battery <= 30 || weight >= 23.5) {
                     isReturningToDock = true;
@@ -322,12 +318,12 @@
                 }, 1000);
             }
 
-            // Manual Override Function
+         
             function manualOverride() {
                 if (!isReturningToDock && !isDocked) {
-                    clearInterval(fetchInterval); // Stop fetching data and movement
+                    clearInterval(fetchInterval);
                     isReturningToDock = true;
-                    moveToDockingStation(); // Move to the docking station
+                    moveToDockingStation();
                 }
             }
 
